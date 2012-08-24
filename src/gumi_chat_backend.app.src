@@ -1,0 +1,18 @@
+%% Feel free to use, reuse and abuse the code in this file.
+
+{application, gumi_chat_backend, [
+	{description, "[Gumi Chat Backend]"},
+	{vsn, "0.1.0"},
+	{modules, []},
+	{registered, [gumi_chat_backend_sup]},
+	{applications, [
+		kernel,
+		stdlib,
+		crypto,
+		public_key,
+		ssl,
+		cowboy
+	]},
+	{mod, {gumi_chat_backend, []}},
+	{env, []}
+]}.

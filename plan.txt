@@ -1,0 +1,24 @@
+plan.txt
+
+todo:
+
+-extract user_id [ok]
+-ws_send_msg, with/without id [ok]
+-router:login/logout [ok]
+-browser send/router:send ok [ok] | user_offline [ok]
+-router:broadcast [ok] 
+-router protect id2pid mapping
+-
+
+follow-up:
+
+-flooding test
+-request compact
+-authenticate
+-router supervisor
+-kernel poll [ok]
+-message format refine
+
+
+complete.
+

@@ -1,0 +1,11 @@
+{application,gumi_chat_backend,
+             [{description,"[Gumi Chat Backend]"},
+              {vsn,"0.1.0"},
+              {modules,[cowboy_examples,cowboy_examples_sup,default_handler,
+                        eventsource_emitter,eventsource_handler,
+                        gumi_chat_backend,gumi_chat_backend_sup,
+                        gumi_chat_msg_router,mochiweb_util,websocket_handler]},
+              {registered,[gumi_chat_backend_sup]},
+              {applications,[kernel,stdlib,crypto,public_key,ssl,cowboy]},
+              {mod,{gumi_chat_backend,[]}},
+              {env,[]}]}.
