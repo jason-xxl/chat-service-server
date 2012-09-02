@@ -26,35 +26,76 @@ malformed url!
 			 true -><<"<html>
 <head>
 <script type=\"text/javascript\">
-function addStatus(text){
+
+function addStatus(text,grey){
+	grey=grey||false;
 	var date = new Date();
+	var text=\"<p>\" + date + \": \" + text + \"</p>\";
+	if(grey){
+		text='<font color=\"grey\">'+text+'</font>';
+		}
 	document.getElementById('status').innerHTML
-		= document.getElementById('status').innerHTML
-		+ date + \": \" + text + \"<br/>\";
+		= text
+		+ document.getElementById('status').innerHTML;
 }
+
+function do_submit(){
+
+	var to=document.getElementById(\"action_send_to\").value;
+	var txt=document.getElementById(\"action_text\").value;
+	
+	if(!txt){
+		alert('Text empty.');
+		return false;
+	}
+
+	var msg=to?'action=send_msg&user_id_to='+encodeURIComponent(to):'action=broadcast_msg';
+	msg+='&msg='+encodeURIComponent(txt);
+	
+	if(window.ws){
+		try{
+			addStatus(msg,true);
+			window.ws.send(msg);
+		}catch(e){
+			alert(e);
+		}
+	}else{
+		alert('Connection not found.');
+	}
+
+	document.getElementById(\"action_text\").value='';
+	return false;
+}
+
+
+
 function ready(){
 	if (\"MozWebSocket\" in window) {
 		WebSocket = MozWebSocket;
 	}
 	if (\"WebSocket\" in window) {
+
 		// browser supports websockets
 		ws_url=\"ws://\"+location.hostname+\":8080/msg_channel/?u=",User_id/binary,"\";
-		alert(ws_url);
+		//alert(ws_url);
 		var ws = new WebSocket(ws_url);
+		window.ws=ws;
 		ws.onopen = function() {
 			// websocket is connected
-			addStatus(\"websocket connected!\");
+			// addStatus(\"websocket connected!\");
 			// send hello data to server.
-			ws.send(\"hello server!\");
-			addStatus(\"sent message to server: 'hello server'!\");
+			// ws.send(\"hello server!\");
+			addStatus('[connected]');
 		};
+		
 		ws.onmessage = function (evt) {
 			var receivedMsg = evt.data;
-			addStatus(\"server sent the following: '\" + receivedMsg + \"'\");
+			addStatus(receivedMsg);
 		};
+
 		ws.onclose = function() {
 			// websocket was closed
-			addStatus(\"websocket was closed\");
+			addStatus(\"[websocket was closed]\");
 		};
 
 		/*
@@ -64,7 +105,6 @@ function ready(){
 				ws.send(msg);
 			},2000);
 		},2000);
-		*/
 
 		window.setTimeout(function(){
 			window.setInterval(function(){
@@ -72,17 +112,37 @@ function ready(){
 				ws.send(msg);
 			},3000);
 		},3000);
+		*/
 
 	} else {
 		// browser does not support websockets
-		addStatus(\"sorry, your browser does not support websockets.\");
+		addStatus(\"[your browser does not support websocket.]\");
 	}
 }
 </script>
 </head>
 <body onload=\"ready();\">
-Hi!
-<div id=\"status\"></div>
+
+<h3>Gumi Chat Backend - Simple Test Interface</h3>
+<hr/>
+
+<form onsubmit=\"do_submit();return false;\">
+
+<p>
+Receipient User ID <input type=\"text\" id=\"action_send_to\"/> [empty for broadcast]
+</p>
+
+<p>
+<input type=\"text\" style=\"width:300px;\" id=\"action_text\"/>
+</p>
+
+<input type='submit' value='Send' />
+
+</form>
+<hr/>
+<div id=\"status\">
+
+</div>
 </body>
 </html>">>
 	end,
@@ -109,12 +169,14 @@ websocket_init(_Any, Req, []) ->
 	%timer:send_interval(2000, {broadcast, <<"Msg from broadcast">>}),
 	%Req2 = cowboy_http_req:compact(Req),
 	
-	case get_user_id(Req) of
+	User_id=get_user_id(Req),
+
+	case User_id of
 		undefined -> 
-			io:format('websocket_init(_Any, Req, []); 0\n',[]),
+			%io:format('websocket_init(_Any, Req, []); 0\n',[]),
 			{shutdown, Req};
-		User_id -> 
-			io:format('websocket_init(_Any, Req, []); ~p\n',[User_id]),
+		_ -> 
+			%io:format('websocket_init(_Any, Req, []); ~p\n',[User_id]),
 			gumi_chat_msg_router:login(User_id, self()),
 			{ok, Req, undefined, hibernate}
 	end.
@@ -123,55 +185,71 @@ websocket_init(_Any, Req, []) ->
 websocket_handle({text, Msg}, Req, State) ->
 	Query_args=mochiweb_util:parse_qs(Msg),
 	Action=mochiweb_util:extract_query_arg_value_as_str(Query_args,"action","(empty)"),
-	io:format('websocket_handle({text, Msg}, Req, State) ~p ~p ~p ~p\n',[Msg,Query_args,"action",Action]),
+	%io:format('websocket_handle({text, Msg}, Req, State) ~p ~p ~p ~p\n',[Msg,Query_args,"action",Action]),
 	
 	case Action of
 		"send_msg"->
 			Msg1 = list_to_binary(mochiweb_util:extract_query_arg_value_as_str(Query_args,"msg","(empty)")), 
 			User_id_to = list_to_binary(mochiweb_util:extract_query_arg_value_as_str(Query_args,"user_id_to","0")), 
-			gumi_chat_msg_router:send(Msg1, get_user_id(Req), User_id_to),
-			{reply, {text, << "You sent '", Msg1/binary,"' to ",User_id_to/binary >>}, Req, State, hibernate};
-		
+			User_id_from = get_user_id(Req),
+			if
+				User_id_to == User_id_from ->
+					{reply, {text, << "[type:service_msg]cannot send to yourself" >>}, Req, State, hibernate};
+				true ->
+					gumi_chat_msg_router:send(Msg1, get_user_id(Req), User_id_to),
+					{reply, {text, << "[type:service_msg]ok" >>}, Req, State, hibernate}
+			end;
+
 		"broadcast_msg"->
 			Msg1 = list_to_binary(mochiweb_util:extract_query_arg_value_as_str(Query_args,"msg","(empty)")), 
 			gumi_chat_msg_router:broadcast(Msg1, get_user_id(Req)),
-			{reply, {text, << "You broadcast '", Msg1/binary >>}, Req, State, hibernate};
+			{reply, {text, << "[type:service_msg]ok" >>}, Req, State, hibernate};
 		
 		_ ->
-			{reply, {text, << "You said: ", Msg/binary>>}, Req, State, hibernate}
+			{reply, {text, << "[type:service_msg]error for unknown_format", Msg/binary>>}, Req, State, hibernate}
 	end;
 
 websocket_handle(_Any, Req, State) ->
-	io:format('handle unknown\n',[]),
+	%io:format('handle unknown\n',[]),
 	{ok, Req, State}.
 
-websocket_info(tick, Req, State) ->
-	io:format('websocket_info(tick, Req, State)\n',[]),
-	%{User_id, _Req1}=cowboy_http_req:qs_val(<<"u">>, Req, <<"0">>),
-	%gumi_chat_msg_router:send(User_id, <<"msg from router.">>),
-	{reply, {text, <<"Tick">>}, Req, State, hibernate};
+%websocket_info(tick, Req, State) ->
+%	%io:format('websocket_info(tick, Req, State)\n',[]),
+%	%{User_id, _Req1}=cowboy_http_req:qs_val(<<"u">>, Req, <<"0">>),
+%	%gumi_chat_msg_router:send(User_id, <<"msg from router.">>),
+%	{reply, {text, <<"Tick">>}, Req, State, hibernate};
 
 %websocket_info({boardcast, _Msg}, Req, State) ->
 %	%{User_id, _Req1}=cowboy_http_req:qs_val(<<"u">>, Req, <<"0">>),
-%	io:format('websocket_info({boardcast, Msg}, Req, State)\n',[]),
+%	%io:format('websocket_info({boardcast, Msg}, Req, State)\n',[]),
 %	%gumi_chat_msg_router:broadcast(Msg),
 %	{ok, Req, State, hibernate};
 
-websocket_info({text, Msg}, Req, State) ->
-	io:format('websocket_info({text, Msg}, Req, State) \n',[]),
-	Msg1= <<"[src:(unknown)] ",Msg/binary>>,
+%websocket_info({text, Msg}, Req, State) ->
+%	%io:format('websocket_info({text, Msg}, Req, State) \n',[]),
+%	Msg1= <<"[src:(unknown)] ",Msg/binary>>,
+%	{reply, {text, Msg1}, Req, State, hibernate};
+
+websocket_info({send_msg, Msg, User_id}, Req, State) ->
+	%io:format('websocket_info({text, Msg, User_id}, Req, State) \n',[]),
+	Msg1= <<"[type:send_msg;sender:",User_id/binary,"]", Msg/binary>>,
 	{reply, {text, Msg1}, Req, State, hibernate};
 
-websocket_info({text, Msg, User_id}, Req, State) ->
-	io:format('websocket_info({text, Msg, User_id}, Req, State) \n',[]),
-	Msg1= <<"[src:",User_id/binary,"] ", Msg/binary>>,
+websocket_info({broadcast_msg, Msg, User_id}, Req, State) ->
+	%io:format('websocket_info({text, Msg, User_id}, Req, State) \n',[]),
+	Msg1= <<"[type:broadcast_msg;sender:",User_id/binary,"]", Msg/binary>>,
+	{reply, {text, Msg1}, Req, State, hibernate};
+
+websocket_info({service_msg, Msg}, Req, State) ->
+	%io:format('websocket_info({text, Msg, User_id}, Req, State) \n',[]),
+	Msg1= <<"[type:service_msg]", Msg/binary>>,
 	{reply, {text, Msg1}, Req, State, hibernate};
 
 websocket_info(_Info, Req, State) ->
-	io:format('websocket_info(_Info, Req, State) \n',[]),
+	%io:format('websocket_info(_Info, Req, State) \n',[]),
 	{ok, Req, State, hibernate}.
 
 websocket_terminate(_Reason, _Req, _State) ->
-	io:format('websocket_terminate(_Reason, _Req, _State) \n',[]),
+	%io:format('websocket_terminate(_Reason, _Req, _State) \n',[]),
 	gumi_chat_msg_router:logout(self()),
 	ok.

@@ -10,10 +10,10 @@
 -define(SERVER, global:whereis_name(?MODULE)).
 
 % will hold bidirectional mapping between id <--> pid
--record(state, {pid2id, id2pid}).
+-record(state, {pid2id, id2pid, current_auto_user_id}).
 
 start_link() ->
-	io:format("router started.\n",[]),
+	%io:format("router started.\n",[]),
     gen_server:start_link({global, ?MODULE}, ?MODULE, [], []).
 
 % sends Msg to anyone logged in as Id
@@ -32,21 +32,28 @@ logout(Pid) when is_pid(Pid) ->
 %%
 
 init([]) ->
-	io:format("router was initiated.\n",[]),
+	%io:format("router was initiated.\n",[]),
     % set this so we can catch death of logged in pids:
     process_flag(trap_exit, true),
     % use ets for routing tables
     {ok, #state{
                 pid2id = ets:new(?MODULE, [bag]),
-                id2pid = ets:new(?MODULE, [bag])
+                id2pid = ets:new(?MODULE, [bag]),
+                current_auto_user_id = 0
                }
     }.
+
+handle_call({generate_id, Pid}, _From, State) when is_pid(Pid) ->
+    Current_auto_user_id = 1 + State#state.current_auto_user_id,
+    State1=State#state{current_auto_user_id=Current_auto_user_id},
+    Pid ! {generate_id, Current_auto_user_id},
+    {reply, ok, State1};
 
 handle_call({login, Id, Pid}, _From, State) when is_pid(Pid) ->
     ets:insert(State#state.pid2id, {Pid, Id}),
     ets:insert(State#state.id2pid, {Id, Pid}),
     link(Pid), % tell us if they exit, so we can log them out
-    io:format("~w logged in as ~w\n",[Pid, Id]),
+    %io:format("~w logged in as ~w\n",[Pid, Id]),
     {reply, ok, State};
 
 handle_call({logout, Pid}, _From, State) when is_pid(Pid) ->
@@ -62,7 +69,7 @@ handle_call({logout, Pid}, _From, State) when is_pid(Pid) ->
             % and all id->pid
             [ ets:delete_object(State#state.id2pid, Obj) || Obj <- IdRows ]
     end,
-    io:format("pid ~w logged out\n",[Pid]),
+    %io:format("pid ~w logged out\n",[Pid]),
     {reply, ok, State};
 
 
@@ -75,12 +82,12 @@ handle_call({send_msg, Msg, User_id_from, User_id_to}, _From, State) ->
             User_existence = length(Pids),
             if 
                 User_existence > 0 ->
-                    M = {text, Msg, User_id_from},
+                    M = {send_msg, Msg, User_id_from},
                     [ Pid ! M || Pid <- Pids ],
                     {reply, ok, State};
                 true ->
                     Pids_from = [ P || { _User_id_from, P } <- ets:lookup(State#state.id2pid, User_id_from) ],
-                    M = {text, Msg, User_id_from},
+                    M = {service_msg, <<"msg not delivered coz user offline.">>},
                     [ Pid ! M || Pid <- Pids_from ],
                     {reply, ok, State}
             end;
@@ -92,25 +99,26 @@ handle_call({send_msg, Msg, User_id_from, User_id_to}, _From, State) ->
 
 handle_call({broadcast_msg, Msg, User_id_from}, _From, State) ->
     % get pids who are logged in as this Id
-    Msg1={text, Msg, User_id_from},
+    Msg1={broadcast_msg, Msg, User_id_from},
 
     Send_func= fun(Id2pid_tuple, Count)->
-        io:format('Id2pid_tuple: ~w',[Count]),
+        %io:format('Id2pid_tuple: ~w',[Count]),
         {_User_id_to,Pid}=Id2pid_tuple,
         Pid ! Msg1,
         Count1=Count+1,
         Count1
     end,
 
-    Total_sent=ets:foldl(Send_func,0,State#state.id2pid),
+    %Total_sent=
+    ets:foldl(Send_func,0,State#state.id2pid),
 
     %Pids = [ P || { _User_id, P } <- ets:lookup(State#state.id2pid, User_id) ],
     % send Msg to them all
-    io:format('Total sent: ~w',[Total_sent]),
+    %io:format('Total sent: ~w',[Total_sent]),
     {reply, ok, State};
 
-handle_call( Msg , _From, State) ->
-    io:format('Unknown call: ~p',[Msg]),
+handle_call( _Msg , _From, State) ->
+    %io:format('Unknown call: ~p',[Msg]),
     {reply, ok, State}.
 
 
@@ -122,7 +130,8 @@ handle_info(Info, State) ->
             % force logout:
             handle_call({logout, Pid}, blah, State); 
         _ ->
-            io:format("Caught unhandled message: ~p\n", [Info])
+            false
+            %io:format("Caught unhandled message: ~p\n", [Info])
     end,
     {noreply, State}.
 
