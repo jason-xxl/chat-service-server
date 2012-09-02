@@ -157,7 +157,8 @@ terminate(_Req, _State) ->
 get_user_id(Req)->
 	case cowboy_http_req:qs_val(<<"u">>, Req, undefined) of
 		{<<"">>,_Req1} -> 
-			undefined;
+			<<"0000">>;
+			%undefined;
 		{User_id,_Req1} -> 
 			User_id
 	end.
