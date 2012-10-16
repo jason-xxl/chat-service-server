@@ -76,7 +76,7 @@ function ready(){
 	if (\"WebSocket\" in window) {
 
 		// browser supports websockets
-		ws_url=\"ws://\"+location.hostname+\":8080/msg_channel/?u=",User_id/binary,"\";
+		ws_url=\"ws://\"+location.hostname+\":8001/msg_channel/?u=",User_id/binary,"\";
 		//alert(ws_url);
 		var ws = new WebSocket(ws_url);
 		window.ws=ws;
