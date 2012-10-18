@@ -7,8 +7,6 @@
 -export([websocket_init/3, websocket_handle/3,
 	websocket_info/3, websocket_terminate/3]).
 
--record(rs_state,{user}).
-
 init({_Any, http}, Req, []) ->
 	case cowboy_http_req:header('Upgrade', Req) of
 		{undefined, Req2} -> {ok, Req2, undefined};
@@ -32,16 +30,10 @@ malformed url!
 function addStatus(text,grey){
 	grey=grey||false;
 	var date = new Date();
-
-	var tpl=\"<ul><li>{text}</li></ul>\";
-	var tpl_grey=\"<div style=\\\"text-align:right; color:grey; font-size:10px;\\\">{text}</div>\";
-	
+	var text=\"<p>\" + date + \": \" + text + \"</p>\";
 	if(grey){
-		text=tpl.replace('{text}',text);
-	}else{
-		text=tpl_grey.replace('{text}',text);
-	}
-
+		text='<font color=\"grey\">'+text+'</font>';
+		}
 	document.getElementById('status').innerHTML
 		= text
 		+ document.getElementById('status').innerHTML;
@@ -84,7 +76,7 @@ function ready(){
 	if (\"WebSocket\" in window) {
 
 		// browser supports websockets
-		ws_url=\"ws://\"+location.hostname+\":8010/msg_channel/?u=",User_id/binary,"\";
+		ws_url=\"ws://\"+location.hostname+\":8003/msg_channel/?u=",User_id/binary,"\";
 		//alert(ws_url);
 		var ws = new WebSocket(ws_url);
 		window.ws=ws;
@@ -187,7 +179,7 @@ websocket_init(_Any, Req, []) ->
 		_ -> 
 			%io:format('websocket_init(_Any, Req, []); ~p\n',[User_id]),
 			gumi_chat_msg_router:login(User_id, self()),
-			{ok, Req, #rs_state{}, hibernate}
+			{ok, Req, undefined, hibernate}
 	end.
 
 
